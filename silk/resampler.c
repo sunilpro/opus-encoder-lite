@@ -112,17 +112,8 @@ opus_int silk_resampler_init(
 
     /* Find resampler with the right sampling ratio */
     up2x = 0;
-    if( Fs_Hz_out > Fs_Hz_in ) {
-        /* Upsample */
-        if( Fs_Hz_out == silk_MUL( Fs_Hz_in, 2 ) ) {                            /* Fs_out : Fs_in = 2 : 1 */
-            /* Special case: directly use 2x upsampler */
-            S->resampler_function = USE_silk_resampler_private_up2_HQ_wrapper;
-        } else {
-            /* Default resampler */
-            S->resampler_function = USE_silk_resampler_private_IIR_FIR;
-            up2x = 1;
-        }
-    } else if ( Fs_Hz_out < Fs_Hz_in ) {
+    debug_fail( Fs_Hz_out > Fs_Hz_in )
+    if ( Fs_Hz_out < Fs_Hz_in ) {
         /* Downsample */
          S->resampler_function = USE_silk_resampler_private_down_FIR;
         if( silk_MUL( Fs_Hz_out, 4 ) == silk_MUL( Fs_Hz_in, 3 ) ) {             /* Fs_out : Fs_in = 3 : 4 */
@@ -192,12 +183,10 @@ opus_int silk_resampler(
 
     switch( S->resampler_function ) {
         case USE_silk_resampler_private_up2_HQ_wrapper:
-            silk_resampler_private_up2_HQ_wrapper( S, out, S->delayBuf, S->Fs_in_kHz );
-            silk_resampler_private_up2_HQ_wrapper( S, &out[ S->Fs_out_kHz ], &in[ nSamples ], inLen - S->Fs_in_kHz );
+            debug_fail(S->resampler_function == USE_silk_resampler_private_up2_HQ_wrapper)
             break;
         case USE_silk_resampler_private_IIR_FIR:
-            silk_resampler_private_IIR_FIR( S, out, S->delayBuf, S->Fs_in_kHz );
-            silk_resampler_private_IIR_FIR( S, &out[ S->Fs_out_kHz ], &in[ nSamples ], inLen - S->Fs_in_kHz );
+            debug_fail(S->resampler_function == USE_silk_resampler_private_IIR_FIR)
             break;
         case USE_silk_resampler_private_down_FIR:
             silk_resampler_private_down_FIR( S, out, S->delayBuf, S->Fs_in_kHz );

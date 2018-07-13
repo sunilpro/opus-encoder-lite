@@ -159,11 +159,8 @@ opus_int silk_pitch_analysis_core(                  /* O    Voicing estimate: 0 
         silk_memset( filt_state, 0, 2 * sizeof( opus_int32 ) );
         silk_resampler_down2( filt_state, frame_8kHz_buf, frame, frame_length );
         frame_8kHz = frame_8kHz_buf;
-    } else if( Fs_kHz == 12 ) {
-        silk_memset( filt_state, 0, 6 * sizeof( opus_int32 ) );
-        silk_resampler_down2_3( filt_state, frame_8kHz_buf, frame, frame_length );
-        frame_8kHz = frame_8kHz_buf;
     } else {
+        debug_fail( Fs_kHz == 12 )
         silk_assert( Fs_kHz == 8 );
         frame_8kHz = frame;
     }

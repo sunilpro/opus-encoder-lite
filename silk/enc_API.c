@@ -242,7 +242,6 @@ opus_int silk_Encode(                                   /* O    Returns error co
         silk_DIV32_16( nSamplesToBufferMax *
                            psEnc->state_Fxx[ 0 ].sCmn.API_fs_Hz,
                        psEnc->state_Fxx[ 0 ].sCmn.fs_kHz * 1000 );
-    ALLOC( buf, nSamplesFromInputMax, opus_int16 );
     while( 1 ) {
         nSamplesToBuffer  = psEnc->state_Fxx[ 0 ].sCmn.frame_length - psEnc->state_Fxx[ 0 ].sCmn.inputBufIx;
         nSamplesToBuffer  = silk_min( nSamplesToBuffer, nSamplesToBufferMax );
@@ -253,6 +252,7 @@ opus_int silk_Encode(                                   /* O    Returns error co
 
         {
             silk_assert( encControl->nChannelsAPI == 1 && encControl->nChannelsInternal == 1 );
+            ALLOC( buf, nSamplesFromInputMax, opus_int16 );
             silk_memcpy(buf, samplesIn, nSamplesFromInput*sizeof(opus_int16));
             ret += silk_resampler( &psEnc->state_Fxx[ 0 ].sCmn.resampler_state,
                 &psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.inputBufIx + 2 ], buf, nSamplesFromInput );
