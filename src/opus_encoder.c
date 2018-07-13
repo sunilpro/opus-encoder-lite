@@ -67,8 +67,6 @@ typedef struct {
 } StereoWidthState;
 
 struct OpusEncoder {
-    int          celt_enc_offset;
-    int          silk_enc_offset;
     silk_EncControlStruct silk_mode;
     int          application;
     int          channels;
@@ -112,7 +110,7 @@ struct OpusEncoder {
     int          first;
     opus_val16 * energy_masking;
     StereoWidthState width_mem;
-    opus_val16   delay_buffer[MAX_ENCODER_BUFFER*2];
+    opus_val16   delay_buffer[MAX_ENCODER_BUFFER];
 #ifndef DISABLE_FLOAT_API
     int          detected_bandwidth;
     int          nb_no_activity_frames;
@@ -168,24 +166,16 @@ static const opus_int32 fec_thresholds[] = {
         22000, 1000, /* FB */
 };
 
-int opus_encoder_get_size(int channels)
-{
-    int silkEncSizeBytes, celtEncSizeBytes;
-    int ret;
-    if (channels<1 || channels > 2)
-        return 0;
-    ret = silk_Get_Encoder_Size( &silkEncSizeBytes );
-    if (ret)
-        return 0;
-    silkEncSizeBytes = align(silkEncSizeBytes);
-    celtEncSizeBytes = celt_encoder_get_size(channels);
-    return align(sizeof(OpusEncoder))+silkEncSizeBytes+celtEncSizeBytes;
+OpusEncoder g_st;
+silk_encoder g_selk_enc;
+
+silk_encoder *get_silkEncoder(OpusEncoder* st) {
+	return (silk_encoder *)&g_selk_enc;
 }
 
 int opus_encoder_init(OpusEncoder* st, opus_int32 Fs, int channels, int application)
 {
     void *silk_enc;
-    CELTEncoder *celt_enc;
     int err;
     int ret, silkEncSizeBytes;
 
@@ -194,16 +184,7 @@ int opus_encoder_init(OpusEncoder* st, opus_int32 Fs, int channels, int applicat
         && application != OPUS_APPLICATION_RESTRICTED_LOWDELAY))
         return OPUS_BAD_ARG;
 
-    OPUS_CLEAR((char*)st, opus_encoder_get_size(channels));
-    /* Create SILK encoder */
-    ret = silk_Get_Encoder_Size( &silkEncSizeBytes );
-    if (ret)
-        return OPUS_BAD_ARG;
-    silkEncSizeBytes = align(silkEncSizeBytes);
-    st->silk_enc_offset = align(sizeof(OpusEncoder));
-    st->celt_enc_offset = st->silk_enc_offset+silkEncSizeBytes;
-    silk_enc = (char*)st+st->silk_enc_offset;
-    celt_enc = (CELTEncoder*)((char*)st+st->celt_enc_offset);
+    silk_enc = &g_selk_enc;
 
     st->stream_channels = st->channels = channels;
 
@@ -230,25 +211,17 @@ int opus_encoder_init(OpusEncoder* st, opus_int32 Fs, int channels, int applicat
     st->silk_mode.useCBR                    = 0;
     st->silk_mode.reducedDependency         = 0;
 
-    /* Create CELT encoder */
-    /* Initialize CELT encoder */
-    err = celt_encoder_init(celt_enc, Fs, channels, st->arch);
-    if(err!=OPUS_OK)return OPUS_INTERNAL_ERROR;
-
-    celt_encoder_ctl(celt_enc, CELT_SET_SIGNALLING(0));
-    celt_encoder_ctl(celt_enc, OPUS_SET_COMPLEXITY(st->silk_mode.complexity));
-
     st->use_vbr = 1;
     /* Makes constrained VBR the default (safer for real-time use) */
     st->vbr_constraint = 1;
     st->user_bitrate_bps = OPUS_AUTO;
     st->bitrate_bps = 3000+Fs*channels;
     st->application = application;
-    st->signal_type = OPUS_AUTO;
+    st->signal_type = OPUS_SIGNAL_VOICE; //OPUS_AUTO;
     st->user_bandwidth = OPUS_AUTO;
-    st->max_bandwidth = OPUS_BANDWIDTH_FULLBAND;
+    st->max_bandwidth = OPUS_BANDWIDTH_WIDEBAND;
     st->force_channels = OPUS_AUTO;
-    st->user_forced_mode = OPUS_AUTO;
+    st->user_forced_mode = MODE_SILK_ONLY;//OPUS_AUTO;
     st->voice_ratio = -1;
     st->encoder_buffer = st->Fs/100;
     st->lsb_depth = 24;
@@ -548,7 +521,8 @@ OpusEncoder *opus_encoder_create(opus_int32 Fs, int channels, int application, i
          *error = OPUS_BAD_ARG;
       return NULL;
    }
-   st = (OpusEncoder *)opus_alloc(opus_encoder_get_size(channels));
+   debug("g_st=%ld g_selk_enc=%ld sz=%ld", sizeof(g_st), sizeof(g_selk_enc), sizeof(g_st)+sizeof(g_selk_enc))
+   st = (OpusEncoder *)&g_st; //opus_alloc(opus_encoder_get_size(channels));
    if (st == NULL)
    {
       if (error)
@@ -854,7 +828,7 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
       return OPUS_BUFFER_TOO_SMALL;
     }
 
-    silk_enc = (char*)st+st->silk_enc_offset;
+    silk_enc = &g_selk_enc;
     if (st->application == OPUS_APPLICATION_RESTRICTED_LOWDELAY)
        delay_compensation = 0;
     else
@@ -2018,7 +1992,6 @@ int opus_encoder_ctl(OpusEncoder *st, int request, ...)
             {
                goto bad_arg;
             }
-            celt_encoder_ctl(celt_enc, OPUS_GET_PHASE_INVERSION_DISABLED(value));
         }
         break;
         case OPUS_RESET_STATE:
@@ -2026,7 +1999,7 @@ int opus_encoder_ctl(OpusEncoder *st, int request, ...)
            void *silk_enc;
            silk_EncControlStruct dummy;
            char *start;
-           silk_enc = (char*)st+st->silk_enc_offset;
+           silk_enc = &g_selk_enc;
 #ifndef DISABLE_FLOAT_API
            tonality_analysis_reset(&st->analysis);
 #endif
