@@ -160,9 +160,9 @@ opus_int silk_Encode(                                   /* O    Returns error co
     if (encControl->reducedDependency)
     {
        psEnc->state_Fxx[0].sCmn.first_frame_after_reset = 1;
-       psEnc->state_Fxx[1].sCmn.first_frame_after_reset = 1;
+       //psEnc->state_Fxx[1].sCmn.first_frame_after_reset = 1;
     }
-    psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded = psEnc->state_Fxx[ 1 ].sCmn.nFramesEncoded = 0;
+    psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded = 0; //psEnc->state_Fxx[ 1 ].sCmn.nFramesEncoded = 0;
 
     /* Check values in encoder control structure */
     if( ( ret = check_control_input( encControl ) ) != 0 ) {
@@ -173,22 +173,7 @@ opus_int silk_Encode(                                   /* O    Returns error co
 
     encControl->switchReady = 0;
 
-    if( encControl->nChannelsInternal > psEnc->nChannelsInternal ) {
-        /* Mono -> Stereo transition: init state of second channel and stereo state */
-        ret += silk_init_encoder( &psEnc->state_Fxx[ 1 ], psEnc->state_Fxx[ 0 ].sCmn.arch );
-        silk_memset( psEnc->sStereo.pred_prev_Q13, 0, sizeof( psEnc->sStereo.pred_prev_Q13 ) );
-        silk_memset( psEnc->sStereo.sSide, 0, sizeof( psEnc->sStereo.sSide ) );
-        psEnc->sStereo.mid_side_amp_Q0[ 0 ] = 0;
-        psEnc->sStereo.mid_side_amp_Q0[ 1 ] = 1;
-        psEnc->sStereo.mid_side_amp_Q0[ 2 ] = 0;
-        psEnc->sStereo.mid_side_amp_Q0[ 3 ] = 1;
-        psEnc->sStereo.width_prev_Q14 = 0;
-        psEnc->sStereo.smth_width_Q14 = SILK_FIX_CONST( 1, 14 );
-        if( psEnc->nChannelsAPI == 2 ) {
-            silk_memcpy( &psEnc->state_Fxx[ 1 ].sCmn.resampler_state, &psEnc->state_Fxx[ 0 ].sCmn.resampler_state, sizeof( silk_resampler_state_struct ) );
-            silk_memcpy( &psEnc->state_Fxx[ 1 ].sCmn.In_HP_State,     &psEnc->state_Fxx[ 0 ].sCmn.In_HP_State,     sizeof( psEnc->state_Fxx[ 1 ].sCmn.In_HP_State ) );
-        }
-    }
+    debug_fail( encControl->nChannelsInternal > psEnc->nChannelsInternal )
 
     transition = (encControl->payloadSize_ms != psEnc->state_Fxx[ 0 ].sCmn.PacketSize_ms) || (psEnc->nChannelsInternal != encControl->nChannelsInternal);
 
@@ -248,7 +233,7 @@ opus_int silk_Encode(                                   /* O    Returns error co
         }
         psEnc->state_Fxx[ n ].sCmn.inDTX = psEnc->state_Fxx[ n ].sCmn.useDTX;
     }
-    silk_assert( encControl->nChannelsInternal == 1 || psEnc->state_Fxx[ 0 ].sCmn.fs_kHz == psEnc->state_Fxx[ 1 ].sCmn.fs_kHz );
+    silk_assert( encControl->nChannelsInternal == 1);
 
     /* Input buffering/resampling and encoding */
     nSamplesToBufferMax =
@@ -263,49 +248,10 @@ opus_int silk_Encode(                                   /* O    Returns error co
         nSamplesToBuffer  = silk_min( nSamplesToBuffer, nSamplesToBufferMax );
         nSamplesFromInput = silk_DIV32_16( nSamplesToBuffer * psEnc->state_Fxx[ 0 ].sCmn.API_fs_Hz, psEnc->state_Fxx[ 0 ].sCmn.fs_kHz * 1000 );
         /* Resample and write to buffer */
-        if( encControl->nChannelsAPI == 2 && encControl->nChannelsInternal == 2 ) {
-            opus_int id = psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded;
-            for( n = 0; n < nSamplesFromInput; n++ ) {
-                buf[ n ] = samplesIn[ 2 * n ];
-            }
-            /* Making sure to start both resamplers from the same state when switching from mono to stereo */
-            if( psEnc->nPrevChannelsInternal == 1 && id==0 ) {
-               silk_memcpy( &psEnc->state_Fxx[ 1 ].sCmn.resampler_state, &psEnc->state_Fxx[ 0 ].sCmn.resampler_state, sizeof(psEnc->state_Fxx[ 1 ].sCmn.resampler_state));
-            }
+        debug_fail( encControl->nChannelsAPI == 2 && encControl->nChannelsInternal == 2 )
+        debug_fail( encControl->nChannelsAPI == 2 && encControl->nChannelsInternal == 1 ) 
 
-            ret += silk_resampler( &psEnc->state_Fxx[ 0 ].sCmn.resampler_state,
-                &psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.inputBufIx + 2 ], buf, nSamplesFromInput );
-            psEnc->state_Fxx[ 0 ].sCmn.inputBufIx += nSamplesToBuffer;
-
-            nSamplesToBuffer  = psEnc->state_Fxx[ 1 ].sCmn.frame_length - psEnc->state_Fxx[ 1 ].sCmn.inputBufIx;
-            nSamplesToBuffer  = silk_min( nSamplesToBuffer, 10 * nBlocksOf10ms * psEnc->state_Fxx[ 1 ].sCmn.fs_kHz );
-            for( n = 0; n < nSamplesFromInput; n++ ) {
-                buf[ n ] = samplesIn[ 2 * n + 1 ];
-            }
-            ret += silk_resampler( &psEnc->state_Fxx[ 1 ].sCmn.resampler_state,
-                &psEnc->state_Fxx[ 1 ].sCmn.inputBuf[ psEnc->state_Fxx[ 1 ].sCmn.inputBufIx + 2 ], buf, nSamplesFromInput );
-
-            psEnc->state_Fxx[ 1 ].sCmn.inputBufIx += nSamplesToBuffer;
-        } else if( encControl->nChannelsAPI == 2 && encControl->nChannelsInternal == 1 ) {
-            /* Combine left and right channels before resampling */
-            for( n = 0; n < nSamplesFromInput; n++ ) {
-                sum = samplesIn[ 2 * n ] + samplesIn[ 2 * n + 1 ];
-                buf[ n ] = (opus_int16)silk_RSHIFT_ROUND( sum,  1 );
-            }
-            ret += silk_resampler( &psEnc->state_Fxx[ 0 ].sCmn.resampler_state,
-                &psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.inputBufIx + 2 ], buf, nSamplesFromInput );
-            /* On the first mono frame, average the results for the two resampler states  */
-            if( psEnc->nPrevChannelsInternal == 2 && psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded == 0 ) {
-               ret += silk_resampler( &psEnc->state_Fxx[ 1 ].sCmn.resampler_state,
-                   &psEnc->state_Fxx[ 1 ].sCmn.inputBuf[ psEnc->state_Fxx[ 1 ].sCmn.inputBufIx + 2 ], buf, nSamplesFromInput );
-               for( n = 0; n < psEnc->state_Fxx[ 0 ].sCmn.frame_length; n++ ) {
-                  psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.inputBufIx+n+2 ] =
-                        silk_RSHIFT(psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.inputBufIx+n+2 ]
-                                  + psEnc->state_Fxx[ 1 ].sCmn.inputBuf[ psEnc->state_Fxx[ 1 ].sCmn.inputBufIx+n+2 ], 1);
-               }
-            }
-            psEnc->state_Fxx[ 0 ].sCmn.inputBufIx += nSamplesToBuffer;
-        } else {
+        {
             silk_assert( encControl->nChannelsAPI == 1 && encControl->nChannelsInternal == 1 );
             silk_memcpy(buf, samplesIn, nSamplesFromInput*sizeof(opus_int16));
             ret += silk_resampler( &psEnc->state_Fxx[ 0 ].sCmn.resampler_state,
@@ -351,13 +297,7 @@ opus_int silk_Encode(                                   /* O    Returns error co
                         if( psEnc->state_Fxx[ n ].sCmn.LBRR_flags[ i ] ) {
                             opus_int condCoding;
 
-                            if( encControl->nChannelsInternal == 2 && n == 0 ) {
-                                silk_stereo_encode_pred( psRangeEnc, psEnc->sStereo.predIx[ i ] );
-                                /* For LBRR data there's no need to code the mid-only flag if the side-channel LBRR flag is set */
-                                if( psEnc->state_Fxx[ 1 ].sCmn.LBRR_flags[ i ] == 0 ) {
-                                    silk_stereo_encode_mid_only( psRangeEnc, psEnc->sStereo.mid_only_flags[ i ] );
-                                }
-                            }
+                            debug_fail( encControl->nChannelsInternal == 2 && n == 0 )
                             /* Use conditional coding if previous frame available */
                             if( i > 0 && psEnc->state_Fxx[ n ].sCmn.LBRR_flags[ i - 1 ] ) {
                                 condCoding = CODE_CONDITIONALLY;
@@ -406,36 +346,8 @@ opus_int silk_Encode(                                   /* O    Returns error co
             TargetRate_bps = silk_LIMIT( TargetRate_bps, encControl->bitRate, 5000 );
 
             /* Convert Left/Right to Mid/Side */
-            if( encControl->nChannelsInternal == 2 ) {
-                silk_stereo_LR_to_MS( &psEnc->sStereo, &psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ 2 ], &psEnc->state_Fxx[ 1 ].sCmn.inputBuf[ 2 ],
-                    psEnc->sStereo.predIx[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ], &psEnc->sStereo.mid_only_flags[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ],
-                    MStargetRates_bps, TargetRate_bps, psEnc->state_Fxx[ 0 ].sCmn.speech_activity_Q8, encControl->toMono,
-                    psEnc->state_Fxx[ 0 ].sCmn.fs_kHz, psEnc->state_Fxx[ 0 ].sCmn.frame_length );
-                if( psEnc->sStereo.mid_only_flags[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ] == 0 ) {
-                    /* Reset side channel encoder memory for first frame with side coding */
-                    if( psEnc->prev_decode_only_middle == 1 ) {
-                        silk_memset( &psEnc->state_Fxx[ 1 ].sShape,               0, sizeof( psEnc->state_Fxx[ 1 ].sShape ) );
-                        silk_memset( &psEnc->state_Fxx[ 1 ].sCmn.sNSQ,            0, sizeof( psEnc->state_Fxx[ 1 ].sCmn.sNSQ ) );
-                        silk_memset( psEnc->state_Fxx[ 1 ].sCmn.prev_NLSFq_Q15,   0, sizeof( psEnc->state_Fxx[ 1 ].sCmn.prev_NLSFq_Q15 ) );
-                        silk_memset( &psEnc->state_Fxx[ 1 ].sCmn.sLP.In_LP_State, 0, sizeof( psEnc->state_Fxx[ 1 ].sCmn.sLP.In_LP_State ) );
-                        psEnc->state_Fxx[ 1 ].sCmn.prevLag                 = 100;
-                        psEnc->state_Fxx[ 1 ].sCmn.sNSQ.lagPrev            = 100;
-                        psEnc->state_Fxx[ 1 ].sShape.LastGainIndex         = 10;
-                        psEnc->state_Fxx[ 1 ].sCmn.prevSignalType          = TYPE_NO_VOICE_ACTIVITY;
-                        psEnc->state_Fxx[ 1 ].sCmn.sNSQ.prev_gain_Q16      = 65536;
-                        psEnc->state_Fxx[ 1 ].sCmn.first_frame_after_reset = 1;
-                    }
-                    silk_encode_do_VAD_Fxx( &psEnc->state_Fxx[ 1 ] );
-                } else {
-                    psEnc->state_Fxx[ 1 ].sCmn.VAD_flags[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ] = 0;
-                }
-                if( !prefillFlag ) {
-                    silk_stereo_encode_pred( psRangeEnc, psEnc->sStereo.predIx[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ] );
-                    if( psEnc->state_Fxx[ 1 ].sCmn.VAD_flags[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ] == 0 ) {
-                        silk_stereo_encode_mid_only( psRangeEnc, psEnc->sStereo.mid_only_flags[ psEnc->state_Fxx[ 0 ].sCmn.nFramesEncoded ] );
-                    }
-                }
-            } else {
+            debug_fail( encControl->nChannelsInternal == 2 )
+            {
                 /* Buffering */
                 silk_memcpy( psEnc->state_Fxx[ 0 ].sCmn.inputBuf, psEnc->sStereo.sMid, 2 * sizeof( opus_int16 ) );
                 silk_memcpy( psEnc->sStereo.sMid, &psEnc->state_Fxx[ 0 ].sCmn.inputBuf[ psEnc->state_Fxx[ 0 ].sCmn.frame_length ], 2 * sizeof( opus_int16 ) );
@@ -461,13 +373,6 @@ opus_int silk_Encode(                                   /* O    Returns error co
 
                 if( encControl->nChannelsInternal == 1 ) {
                     channelRate_bps = TargetRate_bps;
-                } else {
-                    channelRate_bps = MStargetRates_bps[ n ];
-                    if( n == 0 && MStargetRates_bps[ 1 ] > 0 ) {
-                        useCBR = 0;
-                        /* Give mid up to 1/2 of the max bits for that frame */
-                        maxBits -= encControl->maxBits / ( tot_blocks * 2 );
-                    }
                 }
 
                 if( channelRate_bps > 0 ) {
@@ -511,7 +416,7 @@ opus_int silk_Encode(                                   /* O    Returns error co
                 }
 
                 /* Return zero bytes if all channels DTXed */
-                if( psEnc->state_Fxx[ 0 ].sCmn.inDTX && ( encControl->nChannelsInternal == 1 || psEnc->state_Fxx[ 1 ].sCmn.inDTX ) ) {
+                if( psEnc->state_Fxx[ 0 ].sCmn.inDTX && ( encControl->nChannelsInternal == 1) ) {
                     *nBytesOut = 0;
                 }
 

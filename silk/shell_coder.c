@@ -57,23 +57,6 @@ static OPUS_INLINE void encode_split(
     }
 }
 
-static OPUS_INLINE void decode_split(
-    opus_int16                  *p_child1,      /* O    pulse amplitude of first child subframe     */
-    opus_int16                  *p_child2,      /* O    pulse amplitude of second child subframe    */
-    ec_dec                      *psRangeDec,    /* I/O  Compressor data structure                   */
-    const opus_int              p,              /* I    pulse amplitude of current subframe         */
-    const opus_uint8            *shell_table    /* I    table of shell cdfs                         */
-)
-{
-    if( p > 0 ) {
-        p_child1[ 0 ] = ec_dec_icdf( psRangeDec, &shell_table[ silk_shell_code_table_offsets[ p ] ], 8 );
-        p_child2[ 0 ] = p - p_child1[ 0 ];
-    } else {
-        p_child1[ 0 ] = 0;
-        p_child2[ 0 ] = 0;
-    }
-}
-
 /* Shell encoder, operates on one shell code frame of 16 pulses */
 void silk_shell_encoder(
     ec_enc                      *psRangeEnc,                    /* I/O  compressor data structure                   */
@@ -112,40 +95,4 @@ void silk_shell_encoder(
     encode_split( psRangeEnc, pulses1[  6 ], pulses2[ 3 ], silk_shell_code_table1 );
     encode_split( psRangeEnc, pulses0[ 12 ], pulses1[ 6 ], silk_shell_code_table0 );
     encode_split( psRangeEnc, pulses0[ 14 ], pulses1[ 7 ], silk_shell_code_table0 );
-}
-
-
-/* Shell decoder, operates on one shell code frame of 16 pulses */
-void silk_shell_decoder(
-    opus_int16                  *pulses0,                       /* O    data: nonnegative pulse amplitudes          */
-    ec_dec                      *psRangeDec,                    /* I/O  Compressor data structure                   */
-    const opus_int              pulses4                         /* I    number of pulses per pulse-subframe         */
-)
-{
-    opus_int16 pulses3[ 2 ], pulses2[ 4 ], pulses1[ 8 ];
-
-    /* this function operates on one shell code frame of 16 pulses */
-    silk_assert( SHELL_CODEC_FRAME_LENGTH == 16 );
-
-    decode_split( &pulses3[  0 ], &pulses3[  1 ], psRangeDec, pulses4,      silk_shell_code_table3 );
-
-    decode_split( &pulses2[  0 ], &pulses2[  1 ], psRangeDec, pulses3[ 0 ], silk_shell_code_table2 );
-
-    decode_split( &pulses1[  0 ], &pulses1[  1 ], psRangeDec, pulses2[ 0 ], silk_shell_code_table1 );
-    decode_split( &pulses0[  0 ], &pulses0[  1 ], psRangeDec, pulses1[ 0 ], silk_shell_code_table0 );
-    decode_split( &pulses0[  2 ], &pulses0[  3 ], psRangeDec, pulses1[ 1 ], silk_shell_code_table0 );
-
-    decode_split( &pulses1[  2 ], &pulses1[  3 ], psRangeDec, pulses2[ 1 ], silk_shell_code_table1 );
-    decode_split( &pulses0[  4 ], &pulses0[  5 ], psRangeDec, pulses1[ 2 ], silk_shell_code_table0 );
-    decode_split( &pulses0[  6 ], &pulses0[  7 ], psRangeDec, pulses1[ 3 ], silk_shell_code_table0 );
-
-    decode_split( &pulses2[  2 ], &pulses2[  3 ], psRangeDec, pulses3[ 1 ], silk_shell_code_table2 );
-
-    decode_split( &pulses1[  4 ], &pulses1[  5 ], psRangeDec, pulses2[ 2 ], silk_shell_code_table1 );
-    decode_split( &pulses0[  8 ], &pulses0[  9 ], psRangeDec, pulses1[ 4 ], silk_shell_code_table0 );
-    decode_split( &pulses0[ 10 ], &pulses0[ 11 ], psRangeDec, pulses1[ 5 ], silk_shell_code_table0 );
-
-    decode_split( &pulses1[  6 ], &pulses1[  7 ], psRangeDec, pulses2[ 3 ], silk_shell_code_table1 );
-    decode_split( &pulses0[ 12 ], &pulses0[ 13 ], psRangeDec, pulses1[ 6 ], silk_shell_code_table0 );
-    decode_split( &pulses0[ 14 ], &pulses0[ 15 ], psRangeDec, pulses1[ 7 ], silk_shell_code_table0 );
 }
