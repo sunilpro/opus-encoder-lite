@@ -944,14 +944,6 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
        if (packet_code==3)
           data[1] = num_multiframes;
 
-       if (!st->use_vbr)
-       {
-          ret = opus_packet_pad(data, ret, max_data_bytes);
-          if (ret == OPUS_OK)
-             ret = max_data_bytes;
-          else
-             ret = OPUS_INTERNAL_ERROR;
-       }
        RESTORE_STACK;
        return ret;
     }
@@ -1566,15 +1558,7 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
     }
     /* Count ToC and redundancy */
     ret += 1+redundancy_bytes;
-    if (!st->use_vbr)
-    {
-       if (opus_packet_pad(data, ret, max_data_bytes) != OPUS_OK)
-       {
-          RESTORE_STACK;
-          return OPUS_INTERNAL_ERROR;
-       }
-       ret = max_data_bytes;
-    }
+
     RESTORE_STACK;
     return ret;
 }
